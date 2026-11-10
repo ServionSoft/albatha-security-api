@@ -1,0 +1,333 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum EntityStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum UserRole {
+  GUARD
+  TEAM_LEADER
+  HR_ADMIN
+  MANAGEMENT
+  SUPER_USER
+}
+
+enum CycleStatus {
+  UPCOMING
+  ACTIVE
+  CLOSED
+}
+
+enum ChallengeStatus {
+  UPCOMING
+  ACTIVE
+  CLOSED
+}
+
+enum ChallengeCategory {
+  MOVE
+  PROGRESS
+  RECOGNITION
+}
+
+enum ActivityUnit {
+  MINUTES
+  COUNT
+  NONE
+}
+
+enum SubmissionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PointsCategory {
+  MOVE
+  PROGRESS
+  RECOGNITION
+  CONSISTENCY
+  BONUS
+}
+
+enum NotificationType {
+  SUBMISSION_SUBMITTED
+  SUBMISSION_APPROVED
+  SUBMISSION_REJECTED
+  CHALLENGE_STARTED
+  POINTS_AWARDED
+  SYSTEM
+}
+
+model Location {
+  id        String        @id
+  name      String
+  code      String        @unique
+  status    EntityStatus  @default(ACTIVE)
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+  teams     Team[]
+  users     User[]
+
+  @@map("locations")
+}
+
+model Team {
+  id         String       @id
+  name       String
+  code       String       @unique
+  leaderId   String?      @map("leader_id")
+  locationId String?      @map("location_id")
+  status     EntityStatus @default(ACTIVE)
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+  leader     User?        @relation("TeamLeader", fields: [leaderId], references: [id], onDelete: SetNull)
+  location   Location?    @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  members    User[]       @relation("UserTeam")
+
+  @@index([locationId])
+  @@index([leaderId])
+  @@index([status])
+  @@map("teams")
+}
+
+model User {
+  id                  String       @id
+  employeeId          String       @unique @map("employee_id")
+  firstName           String       @map("first_name")
+  lastName            String       @map("last_name")
+  phone               String       @default("")
+  email               String?
+  avatarUri           String?      @map("avatar_uri")
+  passwordHash        String       @map("password_hash")
+  teamId              String?      @map("team_id")
+  locationId          String?      @map("location_id")
+  status              EntityStatus @default(ACTIVE)
+  mustChangePassword  Boolean      @default(true) @map("must_change_password")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+  team                Team?        @relation("UserTeam", fields: [teamId], references: [id], onDelete: SetNull)
+  location            Location?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  roles               UserRoleAssignment[]
+  ledTeams            Team[]       @relation("TeamLeader")
+  submissions         Submission[] @relation("Submitter")
+  verifiedSubmissions Submission[] @relation("Verifier")
+  points              PointsTransaction[]
+  progress            ProgressRecord[]
+  notifications       Notification[]
+  notificationPrefs   NotificationPreference?
+  refreshTokens       RefreshToken[]
+
+  @@index([teamId])
+  @@index([locationId])
+  @@index([status])
+  @@map("users")
+}
+
+model UserRoleAssignment {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  role      UserRole
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, role])
+  @@index([role])
+  @@map("user_roles")
+}
+
+model Cycle {
+  id          String           @id
+  name        String
+  startDate   DateTime         @map("start_date") @db.Date
+  endDate     DateTime         @map("end_date") @db.Date
+  status      CycleStatus      @default(UPCOMING)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  challenges  Challenge[]
+  submissions Submission[]
+  progress    ProgressRecord[]
+
+  @@index([status])
+  @@map("cycles")
+}
+
+model Challenge {
+  id          String           @id
+  cycleId     String           @map("cycle_id")
+  name        String
+  category    ChallengeCategory
+  objective   String           @default("")
+  tagline     String?
+  startDate   DateTime         @map("start_date") @db.Date
+  endDate     DateTime         @map("end_date") @db.Date
+  status      ChallengeStatus  @default(UPCOMING)
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  cycle       Cycle            @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  activities  Activity[]
+  submissions Submission[]
+  progress    ProgressRecord[]
+
+  @@index([cycleId])
+  @@index([status])
+  @@index([category])
+  @@map("challenges")
+}
+
+model Activity {
+  id                    String            @id
+  challengeId           String            @map("challenge_id")
+  name                  String
+  category              ChallengeCategory
+  objective             String            @default("")
+  requirement           String            @default("")
+  unit                  ActivityUnit      @default(NONE)
+  points                Int
+  evidenceRequired      Boolean           @default(true) @map("evidence_required")
+  verificationRequired  Boolean           @default(true) @map("verification_required")
+  status                EntityStatus      @default(ACTIVE)
+  deadline              DateTime?         @db.Date
+  defaultQuantity       Int?              @map("default_quantity")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  challenge             Challenge         @relation(fields: [challengeId], references: [id], onDelete: Restrict)
+  submissions           Submission[]
+
+  @@index([challengeId])
+  @@index([status])
+  @@map("activities")
+}
+
+model Submission {
+  id               String             @id
+  userId           String             @map("user_id")
+  activityId       String             @map("activity_id")
+  challengeId      String             @map("challenge_id")
+  cycleId          String             @map("cycle_id")
+  activityDate     DateTime           @map("activity_date") @db.Date
+  submittedAt      DateTime           @default(now()) @map("submitted_at")
+  durationMinutes  Int?               @map("duration_minutes")
+  quantity         Int?
+  notes            String             @default("")
+  evidenceUri      String?            @map("evidence_uri")
+  status           SubmissionStatus   @default(PENDING)
+  expectedPoints   Int                @map("expected_points")
+  awardedPoints    Int                @default(0) @map("awarded_points")
+  verifierId       String?            @map("verifier_id")
+  verifiedAt       DateTime?          @map("verified_at")
+  rejectionReason  String?            @map("rejection_reason")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  user             User               @relation("Submitter", fields: [userId], references: [id], onDelete: Restrict)
+  activity         Activity           @relation(fields: [activityId], references: [id], onDelete: Restrict)
+  challenge        Challenge          @relation(fields: [challengeId], references: [id], onDelete: Restrict)
+  cycle            Cycle              @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  verifier         User?              @relation("Verifier", fields: [verifierId], references: [id], onDelete: SetNull)
+  points           PointsTransaction?
+  relatedNotifications Notification[]
+
+  @@index([userId])
+  @@index([activityId])
+  @@index([challengeId])
+  @@index([cycleId])
+  @@index([status])
+  @@index([verifierId])
+  @@index([userId, activityId, cycleId])
+  @@map("submissions")
+}
+
+model PointsTransaction {
+  id           String          @id
+  userId       String          @map("user_id")
+  category     PointsCategory
+  amount       Int
+  reason       String
+  submissionId String?         @unique @map("submission_id")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  user         User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+  submission   Submission?     @relation(fields: [submissionId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([category])
+  @@map("points_transactions")
+}
+
+model ProgressRecord {
+  id                  String    @id
+  userId              String    @map("user_id")
+  cycleId             String    @map("cycle_id")
+  challengeId         String    @map("challenge_id")
+  percent             Int       @default(0)
+  activitiesCompleted Int       @default(0) @map("activities_completed")
+  activitiesRequired  Int       @default(0) @map("activities_required")
+  weeksParticipated   Int       @default(0) @map("weeks_participated")
+  weeksRequired       Int       @default(3) @map("weeks_required")
+  consecutiveWeeks    Int       @default(0) @map("consecutive_weeks")
+  weekStatuses        Json      @default("[]") @map("week_statuses")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  cycle               Cycle     @relation(fields: [cycleId], references: [id], onDelete: Restrict)
+  challenge           Challenge @relation(fields: [challengeId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, challengeId])
+  @@index([cycleId])
+  @@map("progress_records")
+}
+
+model Notification {
+  id                   String           @id
+  userId               String?          @map("user_id")
+  type                 NotificationType @default(SYSTEM)
+  title                String
+  body                 String
+  readAt               DateTime?        @map("read_at")
+  relatedSubmissionId  String?          @map("related_submission_id")
+  createdAt            DateTime         @default(now()) @map("created_at")
+  updatedAt            DateTime         @updatedAt @map("updated_at")
+  user                 User?            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relatedSubmission    Submission?      @relation(fields: [relatedSubmissionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([readAt])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id           String   @id @default(cuid())
+  userId       String   @unique @map("user_id")
+  submissions  Boolean  @default(true)
+  approvals    Boolean  @default(true)
+  challenges   Boolean  @default(true)
+  points       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
