@@ -16,6 +16,7 @@ import { progressRouter } from "./modules/progress/routes.js";
 import { leaderboardRouter } from "./modules/leaderboard/routes.js";
 import { notificationPrefsRouter, notificationRouter } from "./modules/notifications/routes.js";
 import { dashboardRouter } from "./modules/dashboard/routes.js";
+import { randomValueRouter } from "./modules/random-value/routes.js";
 
 export function createApp() {
   const app = express();
@@ -50,6 +51,7 @@ export function createApp() {
   app.use("/notifications", notificationRouter);
   app.use("/notification-preferences", notificationPrefsRouter);
   app.use("/dashboard", dashboardRouter);
+  app.use("/random-value", randomValueRouter);
 
   app.use(errorHandler);
   return app;

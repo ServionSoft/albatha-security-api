@@ -10,6 +10,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:3000"),
   UPLOAD_DIR: z.string().default("uploads"),
   PUBLIC_BASE_URL: z.string().default("http://localhost:4000"),
+  CRON_SECRET: z.string().min(8).default("albatha-dev-cron-secret-change-me"),
 });
 
 export const env = envSchema.parse(process.env);
